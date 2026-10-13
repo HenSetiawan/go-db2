@@ -468,13 +468,22 @@ func DecodePackedDecimal(b []byte, scale int) string {
 	significant := digits[start:pos]
 	numSig := len(significant)
 
+	if numSig == 1 && significant[0] == '0' && scale < 0 {
+		if isNegative {
+			return "-0"
+		}
+		return "0"
+	}
+
 	negLen := 0
 	if isNegative {
 		negLen = 1
 	}
 
 	var outLen int
-	if scale <= 0 {
+	if scale < 0 {
+		outLen = negLen + numSig - scale
+	} else if scale == 0 {
 		outLen = negLen + numSig
 	} else if numSig <= scale {
 		outLen = negLen + 2 + scale
@@ -496,7 +505,14 @@ func DecodePackedDecimal(b []byte, scale int) string {
 		idx = 1
 	}
 
-	if scale <= 0 {
+	if scale < 0 {
+		copy(out[idx:], significant)
+		idx += numSig
+		for k := 0; k < -scale; k++ {
+			out[idx] = '0'
+			idx++
+		}
+	} else if scale == 0 {
 		copy(out[idx:], significant)
 	} else if numSig <= scale {
 		out[idx] = '0'
