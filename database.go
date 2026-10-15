@@ -4,22 +4,20 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
+
+	"github.com/go-db2/go-db2/internal/validate"
 )
 
 const defaultAdminTimeout = 60 * time.Second
-
-// validSQLIdentRegex enforces strict alphanumeric and Db2 identifier rules.
-var validSQLIdentRegex = regexp.MustCompile(`^[a-zA-Z0-9_#$]{1,128}$`)
 
 func validateSQLIdentifier(val, fieldName string) error {
 	trimmed := strings.TrimSpace(val)
 	if trimmed == "" {
 		return fmt.Errorf("db2: %s cannot be empty", fieldName)
 	}
-	if !validSQLIdentRegex.MatchString(trimmed) {
+	if !validate.IsValidSQLIdentifier(trimmed) {
 		return fmt.Errorf("db2: invalid %s identifier %q (must be alphanumeric or _, #, $)", fieldName, val)
 	}
 	return nil

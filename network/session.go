@@ -11,18 +11,16 @@ import (
 	"io"
 	"net"
 	"os"
-	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/go-db2/go-db2/converters"
+	"github.com/go-db2/go-db2/internal/validate"
 	"github.com/go-db2/go-db2/network/security"
 	"github.com/go-db2/go-db2/types"
 )
-
-var validUserIdentRegex = regexp.MustCompile(`^[a-zA-Z0-9_#$]{1,128}$`)
 
 // SessionConfig holds configuration parameters for establishing a Db2 session.
 type SessionConfig struct {
@@ -1309,7 +1307,7 @@ func (s *Session) SwitchUser(ctx context.Context, newUser string, password ...st
 	if trimmedUser == "" {
 		return errors.New("db2: switch user name cannot be empty")
 	}
-	if !validUserIdentRegex.MatchString(trimmedUser) {
+	if !validate.IsValidSQLIdentifier(trimmedUser) {
 		return fmt.Errorf("db2: invalid switch user identifier %q", newUser)
 	}
 
