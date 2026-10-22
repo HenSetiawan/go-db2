@@ -582,6 +582,14 @@ func packDDM(cp uint16, body []byte) []byte {
 	return append(obj, body...)
 }
 
+// MaxSQLDTAParameters is the maximum number of parameter markers that can be
+// described by one DRDA SQLDSC descriptor group.
+//
+// Db2 does not accept more than one input SQLDSC group in a SQLDTA command.
+// Callers that need larger batches must split the statement into smaller
+// executions.
+const MaxSQLDTAParameters = 84
+
 // BuildSQLDTA constructs the complete SQLDTA object containing FDODSC and FDODTA blocks for the parameters.
 // Optimization: Pre-calculates exact FDODSC size and constructs SQLDTA payload directly in a single contiguous buffer (reduces heap allocs by 80%, cuts execution time by ~33%).
 func BuildSQLDTA(colTypes []types.SQLType, colLens []int64, precs, scales []int, args []any, endian binary.ByteOrder) ([]byte, error) {
@@ -589,9 +597,14 @@ func BuildSQLDTA(colTypes []types.SQLType, colLens []int64, precs, scales []int,
 	if len(colTypes) != numParams || len(colLens) != numParams || len(precs) != numParams || len(scales) != numParams {
 		return nil, fmt.Errorf("db2: mismatched parameter column metadata lengths (expected %d, got %d colTypes)", numParams, len(colTypes))
 	}
+	if numParams > MaxSQLDTAParameters {
+		return nil, fmt.Errorf("db2: %d parameter markers exceed the DRDA SQLDTA limit of %d; split the statement into smaller executions", numParams, MaxSQLDTAParameters)
+	}
 
-	numGroups := (numParams + 83) / 84
-	fdodscLen := numGroups*3 + numParams*3 + 6
+	// One SQLDSC group: 3-byte group header, 3 bytes per parameter, and the
+	// 6-byte SQLDTAGRP terminator. numParams is capped at 84 above because Db2
+	// does not accept multiple input SQLDSC groups.
+	fdodscLen := numParams*3 + 9
 
 	// Allocate a single contiguous slice initialized with room for headers + FDODSC
 	// sqldta layout:
@@ -602,22 +615,11 @@ func BuildSQLDTA(colTypes []types.SQLType, colLens []int64, precs, scales []int,
 	// 12+fdodscLen ..: FDODTA payload
 	sqldta := make([]byte, 12+fdodscLen, 12+fdodscLen+numParams*32+32)
 
-	// Populate FDODSC directly at sqldta[8:]
+	// Populate FDODSC directly at sqldta[8:].
 	fdodscSlice := sqldta[8:8]
-	for i := 0; i < numParams; {
-		chunkSize := numParams - i
-		if chunkSize > 84 {
-			chunkSize = 84
-		}
-
-		fdodscSlice = append(fdodscSlice, byte((1+chunkSize)*3), 0x76, 0xD0)
-
-		for j := 0; j < chunkSize; j++ {
-			idx := i + j
-			fdodscSlice = appendFDODSC(fdodscSlice, colTypes[idx], colLens[idx], precs[idx], scales[idx])
-		}
-
-		i += chunkSize
+	fdodscSlice = append(fdodscSlice, byte((1+numParams)*3), 0x76, 0xD0)
+	for i := 0; i < numParams; i++ {
+		fdodscSlice = appendFDODSC(fdodscSlice, colTypes[i], colLens[i], precs[i], scales[i])
 	}
 	fdodscSlice = append(fdodscSlice, 0x06, 0x71, 0xE4, 0xD0, 0x00, 0x01)
 

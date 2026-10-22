@@ -116,9 +116,9 @@ func TestSecurity_PasswordRedaction(t *testing.T) {
 	}
 }
 
-// 4. SEC-04: Support for >84 Parameters without Integer Overflow
-func TestSecurity_BuildSQLDTA_Over84Parameters(t *testing.T) {
-	numParams := 100 // Exceeds the 84 limit that would overflow a uint8
+// 4. SEC-04: Reject >84 Parameters instead of silently writing 0 rows
+func TestSecurity_BuildSQLDTA_RejectsOver84Parameters(t *testing.T) {
+	numParams := 100
 
 	colTypes := make([]types.SQLType, numParams)
 	colLens := make([]int64, numParams)
@@ -134,18 +134,10 @@ func TestSecurity_BuildSQLDTA_Over84Parameters(t *testing.T) {
 		args[i] = int32(i + 1)
 	}
 
-	sqldta, err := converters.BuildSQLDTA(colTypes, colLens, precs, scales, args, binary.BigEndian)
-	if err != nil {
-		t.Fatalf("BuildSQLDTA failed for %d parameters: %v", numParams, err)
-	}
-
-	if len(sqldta) < 8 {
-		t.Fatalf("BuildSQLDTA produced too short buffer: %d bytes", len(sqldta))
-	}
-
-	totalLen := binary.BigEndian.Uint16(sqldta[0:2])
-	if int(totalLen) != len(sqldta) {
-		t.Fatalf("BuildSQLDTA object length mismatch: header=%d, actual=%d", totalLen, len(sqldta))
+	// Db2 does not accept more than one input SQLDSC group in a SQLDTA
+	// command. Returning an error is safer than silently writing 0 rows.
+	if _, err := converters.BuildSQLDTA(colTypes, colLens, precs, scales, args, binary.BigEndian); err == nil {
+		t.Fatalf("BuildSQLDTA accepted %d parameters", numParams)
 	}
 }
 

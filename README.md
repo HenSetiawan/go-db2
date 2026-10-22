@@ -47,7 +47,7 @@
 | **`Result.LastInsertId()`** | Supported | Automatic identity recovery on `INSERT` via `IDENTITY_VAL_LOCAL()` |
 | **Extended Data Types** | Supported | `DECFLOAT(16/34)` (IEEE 754-2008 DPD), `XML` documents, `TIMESTAMP WITH TIME ZONE` |
 | **Graphic & DBCS Types** | Supported | `GRAPHIC`, `VARGRAPHIC`, `LONG VARGRAPHIC`, `DBCLOB`, `CODEUNITS32` |
-| **Batch / Array Parameter DML** | Supported | High-throughput bulk operations with primitive slices (`[]int`, `[]string`, `[]float64`) |
+| **Batch Parameter DML** | Supported | Primitive slices (`[]int`, `[]string`, `[]float64`) execute the prepared statement once per row; each statement is limited to 84 SQLDTA parameter markers |
 | **Admin DB Management & APIs** | Supported | `CreateDb()`, `DropDb()`, and `ExecAdminCmd()` (`SYSPROC.ADMIN_CMD`) |
 | **Kerberos SSO & GSSAPI Auth** | Supported | Network directory authentication (`SECMEC 7/11`) via `ccache`, `keytab`, or domain credentials |
 | **Trusted Context & User Switching** | Supported | Microsecond user/tenant identity transition (`SwitchUser`, `WithUser`) on pooled connections |
@@ -223,7 +223,7 @@ rows, err := db.QueryContext(clientCtx, "SELECT * FROM orders WHERE status = ?",
 
 ### 5. High-Throughput Batch / Bulk DML
 ```go
-// Bulk insert 1,000 rows in a single DRDA network operation
+// Batch insert: the driver executes the prepared statement once per row.
 productIDs := []int{101, 102, 103, 104}
 skus := []string{"SKU-A", "SKU-B", "SKU-C", "SKU-D"}
 prices := []float64{19.99, 29.50, 49.00, 99.90}
@@ -233,6 +233,11 @@ result, err := db.ExecContext(ctx,
     productIDs, skus, prices,
 )
 ```
+
+> **SQLDTA parameter limit:** a single statement can contain at most 84
+> parameter markers. A statement with more than 84 markers returns an explicit
+> error. Split multi-row statements into smaller executions, or use the slice
+> batch form above.
 
 ---
 

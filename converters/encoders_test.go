@@ -3,6 +3,7 @@ package converters
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,6 +35,33 @@ func TestBuildSQLDTA(t *testing.T) {
 
 	if gotHex != expectedHex {
 		t.Errorf("BuildSQLDTA output mismatch!\nGot:      %s\nExpected: %s", gotHex, expectedHex)
+	}
+}
+
+func TestBuildSQLDTAMaxParameters(t *testing.T) {
+	build := func(count int) ([]byte, error) {
+		colTypes := make([]types.SQLType, count)
+		colLens := make([]int64, count)
+		precs := make([]int, count)
+		scales := make([]int, count)
+		args := make([]any, count)
+		for i := 0; i < count; i++ {
+			colTypes[i] = types.SQLTypeNInteger
+			colLens[i] = 4
+			args[i] = int64(i + 1)
+		}
+		return BuildSQLDTA(colTypes, colLens, precs, scales, args, binary.BigEndian)
+	}
+
+	if _, err := build(MaxSQLDTAParameters); err != nil {
+		t.Fatalf("BuildSQLDTA rejected %d parameters: %v", MaxSQLDTAParameters, err)
+	}
+	_, err := build(MaxSQLDTAParameters + 1)
+	if err == nil {
+		t.Fatalf("BuildSQLDTA accepted %d parameters", MaxSQLDTAParameters+1)
+	}
+	if !strings.Contains(err.Error(), "84") {
+		t.Fatalf("error does not mention the 84-parameter limit: %v", err)
 	}
 }
 
